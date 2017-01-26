@@ -8,7 +8,7 @@
 import discord
 import discord.utils as utils
 from discord import Member
-
+from credentials import token
 client = discord.Client()
 
 #List of the proper names (case sensitive) of the roles that are managed
@@ -50,7 +50,7 @@ def obtainRoleFromServer(role_name, server):
 		print("ERROR: The specification for the role " + name + " matched more or less than one proper role")
 		print("Roles matched:")
 		for role in toReturn:
-			print role.name
+			print(role.name)
 		return None
 	return toReturn[0]
 	
@@ -295,13 +295,15 @@ async def on_message(message):
 			singles_role = obtainRoleFromServer('LF Singles',message.server)
 			await client.add_roles(message.author, singles_role)
 			message.author.roles.append(singles_role)
-			await client.send_message(message.channel, '{0} is looking for singles games! {1}'.format(message.author.name, singles_role.mention()))
+			await client.send_message(message.channel, '{0} is looking for singles games! {1}'.format(message.author.name, singles_role.mention))
+			await client.delete_message(message)
 			return
 		if command[0]=='!lfd':
 			doubles_role = obtainRoleFromServer('LF Doubles',message.server)
 			await client.add_roles(message.author, doubles_role)
 			message.author.roles.append(doubles_role)
-			await client.send_message(message.channel, '{0} is looking for doubles games! {1}'.format(message.author.name, doubles_role.mention()))
+			await client.send_message(message.channel, '{0} is looking for doubles games! {1}'.format(message.author.name, doubles_role.mention))
+			await client.delete_message(message)
 			return
 		if command[0]=='!lfg':
 			singles_role = obtainRoleFromServer('LF Singles',message.server)
@@ -309,31 +311,37 @@ async def on_message(message):
 			await client.add_roles(message.author, singles_role, doubles_role)
 			message.author.roles.append(singles_role)
 			message.author.roles.append(doubles_role)	
-			await client.send_message(message.channel, '{0} is looking for singles and doubles games! {1} {2}'.format(message.author.name, singles_role.mention(), doubles_role.mention()))
+			await client.send_message(message.channel, '{0} is looking for singles and doubles games! {1} {2}'.format(message.author.name, singles_role.mention, doubles_role.mention))
+			await client.delete_message(message)
 			return
 		if command[0]=='!stop':
 			singles_role = obtainRoleFromServer('LF Singles',message.server)
 			doubles_role = obtainRoleFromServer('LF Doubles',message.server)
-			await client.remove_roles(user,singles_role,doubles_role)
+			await client.remove_roles(message.author,singles_role,doubles_role)
 			message.author.roles = [oldrole for oldrole in message.author.roles if oldrole.id != singles_role.id or oldrole.id != doubles_role.id]
-			await client.send_message(message.channel, '{0}, you are no longer looking for any games'.format(message.author.mention()))
+			await client.send_message(message.author, '{0}, you are no longer looking for any games'.format(message.author.mention))
+			await client.delete_message(message)
 			return
-		if command[0]=='help':
+		if command[0]=='!help':
+			await client.delete_message(message)
+			if (command[1]==""):
+				await client.send_message(message.author, 'This is the Nordic Melee Netplay Community role-managing bot!\nCommands are; "!lfs", "!lfd", "!lfg", "!stop", and "!help". Type "!help <command>" to see help for specific command')
+				return
 			if command[1]=='lfs':
-				await client.send_message(message.channel, 'Usage "!lfs". Adds the LF Singles role to you and pings everyone with that role.')
+				await client.send_message(message.authro, 'Usage "!lfs". Adds the LF Singles role to you and pings everyone with that role.')
 				return
 			if command[1]=='lfd':
-				await client.send_message(message.channel, 'Usage "!lfd". Adds the LF Doubles role to you and pings everyone with that role.')
+				await client.send_message(message.author, 'Usage "!lfd". Adds the LF Doubles role to you and pings everyone with that role.')
 				return
 			if command[1]=='lfg':
-				await client.send_message(message.channel, 'Usage "!lfg". Adds both the LF Doubles and the LF Singles role to you and pings everyone with those role.')
+				await client.send_message(message.author, 'Usage "!lfg". Adds both the LF Doubles and the LF Singles role to you and pings everyone with those role.')
 				return	
 			if command[1]=='stop':
-				await client.send_message(message.channel, 'Usage "!stop". Removes the LF Doubles and the LF Singles role from you, if you have either one.')
+				await client.send_message(message.author, 'Usage "!stop". Removes the LF Doubles and the LF Singles role from you, if you have either one.')
 				return
-			await client.send_message(message.channel, 'Commands are; "!lfs", "!lfd", "!lfg", "!stop", and "!help". Type "!help <command>" to see help for specific commands')
+			await client.send_message(message.author, 'Commands are; "!lfs", "!lfd", "!lfg", "!stop", and "!help". Type "!help <command>" to see help for specific commands')
 			return
-		await client.send_message(message.channel, 'Commands are; "!lfs", "!lfd", "!lfg", "!stop", and "!help". Type "!help <command>" to see help for specific commands')
+		await client.send_message(message.author, 'Commands are; "!lfs", "!lfd", "!lfg", "!stop", and "!help". Type "!help <command>" to see help for specific commands')
 
 @client.event
 async def on_ready():
@@ -342,4 +350,4 @@ async def on_ready():
     print(client.user.id)
     print('------')
 
-client.run('YOUREMAILHERE','YOURLOGINHERE')
+client.run(token)
