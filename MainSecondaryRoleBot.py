@@ -14,7 +14,9 @@ client = discord.Client()
 #List of the proper names (case sensitive) of the roles that are managed
 listofmains=["Ice Climbers","Sheik","Fox","Falco","Marth","Mario","Luigi","Yoshi","Donkey Kong","Link","Samus","Kirby","Pikachu","Jigglypuff","Captain Falcon","Ness","Peach","Bowser","Dr.Mario","Zelda","Ganondorf","Young Link","Falco","Mewtwo","Pichu","Game and Watch","Roy"]
 
-requestchannel="mainrequesting"
+main_requestchannel="mainrequesting"
+game_requestchannel="friendlies"
+watched_servers=[main_requestchannel, game_requestchannel]
 requestserver="Nordic Melee Netplay"
 
 #Here you can add common nicknames of characters and map them to their proper role names
@@ -40,7 +42,18 @@ def obtainRoleFromName(name,isMain,server):
 	if (len(toReturn) == 0):
 		return None
 	return toReturn[0]
-
+	
+#Assumes the role_name given is a canonical role name
+def obtainRoleFromServer(role_name, server):
+	toReturn = [role for role in server.roles if role.name == role_name]
+	if (len(toReturn) != 1):
+		print("ERROR: The specification for the role " + name + " matched more or less than one proper role")
+		print("Roles matched:")
+		for role in toReturn:
+			print role.name
+		return None
+	return toReturn[0]
+	
 #Returns the number of mains/secondaries that a particular user has on their role list.
 def countProperRoles(server,user,countOnlyMains):
 	#Obtain the roles to count
@@ -106,7 +119,7 @@ async def on_message(message):
 	if message.channel.is_private:
 		return
 	#Reply only to messages in the channel on the correct server not made by this bot
-	if message.channel.name != requestchannel:
+	if not message.channel.name in watched_servers:
 		return
 	if message.server.name != requestserver:
 		return
@@ -118,166 +131,210 @@ async def on_message(message):
 	#Obtain the command as a list of strings, command[0] is the command, and the following items are the arguments
 	command=message.content.partition(" ")
 	command=[command[0],command[2]]
-	if command[0]=='!replacemain':
-		#If we have the wrong number of arguments, exit
-		if command[1]=="":
-			await client.send_message(message.channel, '{0}, the "!replacemain" command takes exactly one argument'.format(message.author.mention))
+	if message.channel.name == main_requestchannel:
+		if command[0]=='!replacemain':
+			#If we have the wrong number of arguments, exit
+			if command[1]=="":
+				await client.send_message(message.channel, '{0}, the "!replacemain" command takes exactly one argument'.format(message.author.mention))
+				return
+			roletoadd=obtainRoleFromName(command[1],True,message.server)
+			#If we found no roles, print friendly error message
+			if (roletoadd == None):
+				await client.send_message(message.channel, '{0}, did not find a main with that name, try contacting an admin'.format(message.author.mention))
+				return
+			#If the user already has that char as a secondary, remind them of this
+			if (countSpecificRole(message.server,message.author,roletoadd.name) > 0):
+				await client.send_message(message.channel, '{0}, you already have that character as a main or secondary. Remove it before adding it as a main'.format(message.author.mention))
+				return
+			#If the user already has a main, remove it
+			if (countProperRoles(message.server,message.author,True) > 0):
+				for role in message.author.roles:
+					if (role.name in listofmains and role.hoist == True and role in message.server.roles):
+						await client.remove_roles(message.author,role)
+						#hack to make role changes in-place
+						message.author.roles = [oldrole for oldrole in message.author.roles if oldrole.id != role.id]
+						await client.send_message(message.channel, '{0}, {1.name} is no longer your main'.format(message.author.mention,role))
+			#Add the main
+			await client.add_roles(message.author,roletoadd)
+			#hack to make role changes in-place
+			message.author.roles.append(roletoadd)
+			#Since you cannot have duplicate roles, we can indiscriminately add flair roles here
+			await addMainRoles(message.server,message.author)
+			await client.send_message(message.channel, '{0}, added the character {1.name} as your main'.format(message.author.mention,roletoadd))
 			return
-		roletoadd=obtainRoleFromName(command[1],True,message.server)
-		#If we found no roles, print friendly error message
-		if (roletoadd == None):
-			await client.send_message(message.channel, '{0}, did not find a main with that name, try contacting an admin'.format(message.author.mention))
+		if command[0]=='!addmain':
+			#If we have the wrong number of arguments, exit
+			if command[1]=="":
+				await client.send_message(message.channel, '{0}, the "!addmain" command takes exactly one argument'.format(message.author.mention))
+				return
+			roletoadd=obtainRoleFromName(command[1],True,message.server)
+			#If we found no roles, print friendly error message
+			if (roletoadd == None):
+				await client.send_message(message.channel, '{0}, did not find a main with that name, try contacting an admin'.format(message.author.mention))
+				return
+			#If the user already has a main, remind them there can be only one
+			if (countProperRoles(message.server,message.author,True) > 0):
+				await client.send_message(message.channel, '{0}, you already have a main. Remove that main before adding a new one'.format(message.author.mention))
+				return
+			#If the user already has that char as a secondary, remind them of this
+			if (countSpecificRole(message.server,message.author,roletoadd.name) > 0):
+				await client.send_message(message.channel, '{0}, you already have that character as a secondary. Remove it before adding it as a main'.format(message.author.mention))
+				return
+			#Otherwise, add the main
+			await client.add_roles(message.author,roletoadd)
+			#hack to make role changes in-place
+			message.author.roles.append(roletoadd)
+			#Since you cannot have duplicate roles, we can indiscriminately add flair roles here
+			await addMainRoles(message.server,message.author)
+			await client.send_message(message.channel, '{0}, added the character {1.name} as your main'.format(message.author.mention,roletoadd))
 			return
-		#If the user already has that char as a secondary, remind them of this
-		if (countSpecificRole(message.server,message.author,roletoadd.name) > 0):
-			await client.send_message(message.channel, '{0}, you already have that character as a main or secondary. Remove it before adding it as a main'.format(message.author.mention))
-			return
-		#If the user already has a main, remove it
-		if (countProperRoles(message.server,message.author,True) > 0):
+		if command[0]=='!removemain':
+			#If we have the wrong number of arguments, exit
+			if command[1]!="":
+				await client.send_message(message.channel, '{0}, the "!removemain" command takes no arguments, but I will try to remove your main anyways'.format(message.author.mention))
+			#If the user does not already have a main, remind them of this
+			if (countProperRoles(message.server,message.author,True) == 0):
+				await client.send_message(message.channel, '{0}, you do not currently have a main'.format(message.author.mention))
+				return
+			#Otherwise, find the main and remove it
 			for role in message.author.roles:
 				if (role.name in listofmains and role.hoist == True and role in message.server.roles):
 					await client.remove_roles(message.author,role)
 					#hack to make role changes in-place
 					message.author.roles = [oldrole for oldrole in message.author.roles if oldrole.id != role.id]
+					#If the user now has no mains and no secondaries, remove the flairs
+					if (countProperRoles(message.server,message.author,True)+countProperRoles(message.server,message.author,False) == 0):
+						await removeFlairRoles(message.server,message.author)
 					await client.send_message(message.channel, '{0}, {1.name} is no longer your main'.format(message.author.mention,role))
-		#Add the main
-		await client.add_roles(message.author,roletoadd)
-		#hack to make role changes in-place
-		message.author.roles.append(roletoadd)
-		#Since you cannot have duplicate roles, we can indiscriminately add flair roles here
-		await addMainRoles(message.server,message.author)
-		await client.send_message(message.channel, '{0}, added the character {1.name} as your main'.format(message.author.mention,roletoadd))
-		return
-	if command[0]=='!addmain':
-		#If we have the wrong number of arguments, exit
-		if command[1]=="":
-			await client.send_message(message.channel, '{0}, the "!addmain" command takes exactly one argument'.format(message.author.mention))
-			return
-		roletoadd=obtainRoleFromName(command[1],True,message.server)
-		#If we found no roles, print friendly error message
-		if (roletoadd == None):
-			await client.send_message(message.channel, '{0}, did not find a main with that name, try contacting an admin'.format(message.author.mention))
-			return
-		#If the user already has a main, remind them there can be only one
-		if (countProperRoles(message.server,message.author,True) > 0):
-			await client.send_message(message.channel, '{0}, you already have a main. Remove that main before adding a new one'.format(message.author.mention))
-			return
-		#If the user already has that char as a secondary, remind them of this
-		if (countSpecificRole(message.server,message.author,roletoadd.name) > 0):
-			await client.send_message(message.channel, '{0}, you already have that character as a secondary. Remove it before adding it as a main'.format(message.author.mention))
-			return
-		#Otherwise, add the main
-		await client.add_roles(message.author,roletoadd)
-		#hack to make role changes in-place
-		message.author.roles.append(roletoadd)
-		#Since you cannot have duplicate roles, we can indiscriminately add flair roles here
-		await addMainRoles(message.server,message.author)
-		await client.send_message(message.channel, '{0}, added the character {1.name} as your main'.format(message.author.mention,roletoadd))
-		return
-	if command[0]=='!removemain':
-		#If we have the wrong number of arguments, exit
-		if command[1]!="":
-			await client.send_message(message.channel, '{0}, the "!removemain" command takes no arguments, but I will try to remove your main anyways'.format(message.author.mention))
-		#If the user does not already have a main, remind them of this
-		if (countProperRoles(message.server,message.author,True) == 0):
-			await client.send_message(message.channel, '{0}, you do not currently have a main'.format(message.author.mention))
-			return
-		#Otherwise, find the main and remove it
-		for role in message.author.roles:
-			if (role.name in listofmains and role.hoist == True and role in message.server.roles):
-				await client.remove_roles(message.author,role)
-				#hack to make role changes in-place
-				message.author.roles = [oldrole for oldrole in message.author.roles if oldrole.id != role.id]
-				#If the user now has no mains and no secondaries, remove the flairs
-				if (countProperRoles(message.server,message.author,True)+countProperRoles(message.server,message.author,False) == 0):
-					await removeFlairRoles(message.server,message.author)
-				await client.send_message(message.channel, '{0}, {1.name} is no longer your main'.format(message.author.mention,role))
 
-		return
-	if command[0]=='!addsecondary':
-		#If we have the wrong number of arguments, exit
-		if command[1]=="":
-			await client.send_message(message.channel, '{0}, the "!addsecondary" command takes exactly one argument'.format(message.author.mention))
 			return
-		roletoadd=obtainRoleFromName(command[1],False,message.server)
-		#If we found no roles, print friendly error message
-		if (roletoadd == None):
-			await client.send_message(message.channel, '{0}, did not find a secondary with that name, try contacting an admin'.format(message.author.mention))
-			return
-		#If the user already has two secondaries, remind them that three's a crows
-		if (countProperRoles(message.server,message.author,False) > 1):
-			await client.send_message(message.channel, '{0}, you already have two secondaries. Remove one of them before adding a new one'.format(message.author.mention))
-			return
-		#If the user already has that char as a main or secondary, remind them of this
-		if (countSpecificRole(message.server,message.author,roletoadd.name) > 0):
-			await client.send_message(message.channel, '{0}, you already have that character as a main or secondary. Remove it before adding it as a secondary'.format(message.author.mention))
-			return
-		#Otherwise, add the secondary
-		await client.add_roles(message.author,roletoadd)
-		#hack to make role changes in-place
-		message.author.roles.append(roletoadd)
-		#Since you cannot have duplicate roles, we can indiscriminately add flair roles here
-		await addFlairRoles(message.server,message.author)
-		await client.send_message(message.channel, '{0}, added the character {1.name} as one of your secondaries'.format(message.author.mention,roletoadd))
-		return
-	if command[0]=='!removesecondary':
-		#If we have the wrong number of arguments, exit
-		if command[1]=="":
-			await client.send_message(message.channel, '{0}, the "!removesecondary" command takes exactly one argument'.format(message.author.mention))
-			return
-		roletoremove=obtainRoleFromName(command[1],False,message.server)
-		#If we found no roles, print friendly error message
-		if (roletoremove == None):
-			await client.send_message(message.channel, '{0}, did not find a character with that name, try contacting an admin or checking your role list'.format(message.author.mention))
-			return
-		#If the user does not already have any secondaries, remind them of this
-		if (countProperRoles(message.server,message.author,False) == 0):
-			await client.send_message(message.channel, '{0}, you do not currently have any secondaries'.format(message.author.mention))
-			return
-		#Otherwise, remove the secondary if we have it
-		if (roletoremove in message.author.roles):
-			await client.remove_roles(message.author,roletoremove)
+		if command[0]=='!addsecondary':
+			#If we have the wrong number of arguments, exit
+			if command[1]=="":
+				await client.send_message(message.channel, '{0}, the "!addsecondary" command takes exactly one argument'.format(message.author.mention))
+				return
+			roletoadd=obtainRoleFromName(command[1],False,message.server)
+			#If we found no roles, print friendly error message
+			if (roletoadd == None):
+				await client.send_message(message.channel, '{0}, did not find a secondary with that name, try contacting an admin'.format(message.author.mention))
+				return
+			#If the user already has two secondaries, remind them that three's a crows
+			if (countProperRoles(message.server,message.author,False) > 1):
+				await client.send_message(message.channel, '{0}, you already have two secondaries. Remove one of them before adding a new one'.format(message.author.mention))
+				return
+			#If the user already has that char as a main or secondary, remind them of this
+			if (countSpecificRole(message.server,message.author,roletoadd.name) > 0):
+				await client.send_message(message.channel, '{0}, you already have that character as a main or secondary. Remove it before adding it as a secondary'.format(message.author.mention))
+				return
+			#Otherwise, add the secondary
+			await client.add_roles(message.author,roletoadd)
 			#hack to make role changes in-place
-			message.author.roles = [oldrole for oldrole in message.author.roles if oldrole.id != roletoremove.id]
-			#If the user now has no mains and no secondaries, remove the flairs
-			if ((countProperRoles(message.server,message.author,True)+countProperRoles(message.server,message.author,False)) == 0):
-				await removeFlairRoles(message.server,message.author)
+			message.author.roles.append(roletoadd)
+			#Since you cannot have duplicate roles, we can indiscriminately add flair roles here
+			await addFlairRoles(message.server,message.author)
+			await client.send_message(message.channel, '{0}, added the character {1.name} as one of your secondaries'.format(message.author.mention,roletoadd))
+			return
+		if command[0]=='!removesecondary':
+			#If we have the wrong number of arguments, exit
+			if command[1]=="":
+				await client.send_message(message.channel, '{0}, the "!removesecondary" command takes exactly one argument'.format(message.author.mention))
+				return
+			roletoremove=obtainRoleFromName(command[1],False,message.server)
+			#If we found no roles, print friendly error message
+			if (roletoremove == None):
+				await client.send_message(message.channel, '{0}, did not find a character with that name, try contacting an admin or checking your role list'.format(message.author.mention))
+				return
+			#If the user does not already have any secondaries, remind them of this
+			if (countProperRoles(message.server,message.author,False) == 0):
+				await client.send_message(message.channel, '{0}, you do not currently have any secondaries'.format(message.author.mention))
+				return
+			#Otherwise, remove the secondary if we have it
+			if (roletoremove in message.author.roles):
+				await client.remove_roles(message.author,roletoremove)
+				#hack to make role changes in-place
+				message.author.roles = [oldrole for oldrole in message.author.roles if oldrole.id != roletoremove.id]
+				#If the user now has no mains and no secondaries, remove the flairs
+				if ((countProperRoles(message.server,message.author,True)+countProperRoles(message.server,message.author,False)) == 0):
+					await removeFlairRoles(message.server,message.author)
+				else:
+					if (countProperRoles(message.server,message.author,False) == 0):
+						await removeSecondaryRoles(message.server,message.author)
+				await client.send_message(message.channel, '{0}, {1.name} is no longer on of your secondaries'.format(message.author.mention,roletoremove))
 			else:
-				if (countProperRoles(message.server,message.author,False) == 0):
-					await removeSecondaryRoles(message.server,message.author)
-			await client.send_message(message.channel, '{0}, {1.name} is no longer on of your secondaries'.format(message.author.mention,roletoremove))
-		else:
-			await client.send_message(message.channel, '{0}, you do not have that character as a secondary, try adding it first if you want to remove it'.format(message.author.mention))
-
-		return
-	if command[0]=='!help':
-		if (command[1]=="roles"):
-			s=", "
-			await client.send_message(message.channel, 'This bot knows about the canonical role names: {0}'.format(s.join(listofmains)))
+				await client.send_message(message.channel, '{0}, you do not have that character as a secondary, try adding it first if you want to remove it'.format(message.author.mention))
+	
 			return
-		if (command[1]=="!addmain" or command[1]=="addmain"):
-			await client.send_message(message.channel, 'Usage "!addmain <character>". Adds the selected character as your main. You can only have one main at a time. For a list of canonical role names type "!help roles"')
-			return
-		if (command[1]=="!replacemain" or command[1]=="replacemain"):
-			await client.send_message(message.channel, 'Usage "!replacemain <character>". Removes your previous main and adds the selected character as your main. For a list of canonical role names type "!help roles"')
-			return
-		if (command[1]=="!removemain" or command[1]=="removemain"):
-			await client.send_message(message.channel, 'Usage "!removemain". Removes your current main')
-			return
-		if (command[1]=="!addsecondary" or command[1]=="addsecondary"):
-			await client.send_message(message.channel, 'Usage "!addsecondary <character>". Adds the selected character as one of your secondaries. You can have at most two secondaries at a time. For a list of canonical role names type "!help roles"')
-			return
-		if (command[1]=="!removesecondary" or command[1]=="removesecondary"):
-			await client.send_message(message.channel, 'Usage "!removesecondary <character>". Removes the selected character from your secondaries. For a list of canonical role names type "!help roles"')
-			return
-		if (command[1]==""):
-			await client.send_message(message.channel, 'This is the Nordic Melee Netplay Community role-managing bot!\nCommands are; "!addmain", "!removemain", "!addsecondary", "!removesecondary", "!replacemain" and "!help". Type "!help <command>" to see help for specific commands.\nIf the bot does not reply to a command, it probably did it anyways, check your roles to make sure')
+		if command[0]=='!help':
+			if (command[1]=="roles"):
+				s=", "
+				await client.send_message(message.channel, 'This bot knows about the canonical role names: {0}'.format(s.join(listofmains)))
+				return
+			if (command[1]=="!addmain" or command[1]=="addmain"):
+				await client.send_message(message.channel, 'Usage "!addmain <character>". Adds the selected character as your main. You can only have one main at a time. For a list of canonical role names type "!help roles"')
+				return
+			if (command[1]=="!replacemain" or command[1]=="replacemain"):
+				await client.send_message(message.channel, 'Usage "!replacemain <character>". Removes your previous main and adds the selected character as your main. For a list of canonical role names type "!help roles"')
+				return
+			if (command[1]=="!removemain" or command[1]=="removemain"):
+				await client.send_message(message.channel, 'Usage "!removemain". Removes your current main')
+				return
+			if (command[1]=="!addsecondary" or command[1]=="addsecondary"):
+				await client.send_message(message.channel, 'Usage "!addsecondary <character>". Adds the selected character as one of your secondaries. You can have at most two secondaries at a time. For a list of canonical role names type "!help roles"')
+				return
+			if (command[1]=="!removesecondary" or command[1]=="removesecondary"):
+				await client.send_message(message.channel, 'Usage "!removesecondary <character>". Removes the selected character from your secondaries. For a list of canonical role names type "!help roles"')
+				return
+			if (command[1]==""):
+				await client.send_message(message.channel, 'This is the Nordic Melee Netplay Community role-managing bot!\nCommands are; "!addmain", "!removemain", "!addsecondary", "!removesecondary", "!replacemain" and "!help". Type "!help <command>" to see help for specific commands.\nIf the bot does not reply to a command, it probably did it anyways, check your roles to make sure')
+				return
+			await client.send_message(message.channel, 'Commands are; "!addmain", "!removemain", "!addsecondary", "!removesecondary", "!replacemain" and "!help". Type "!help <command>" to see help for specific commands')
 			return
 		await client.send_message(message.channel, 'Commands are; "!addmain", "!removemain", "!addsecondary", "!removesecondary", "!replacemain" and "!help". Type "!help <command>" to see help for specific commands')
-		return
-	await client.send_message(message.channel, 'Commands are; "!addmain", "!removemain", "!addsecondary", "!removesecondary", "!replacemain" and "!help". Type "!help <command>" to see help for specific commands')
-		
-			
+	if message.channel.name == game_requestchannel:
+		if command[0]=='!lfs':
+			singles_role = obtainRoleFromServer('LF Singles',message.server)
+			await client.add_roles(message.author, singles_role)
+			message.author.roles.append(singles_role)
+			await client.send_message(message.channel, '{0} is looking for singles games! {1}'.format(message.author.name, singles_role.mention()))
+			return
+		if command[0]=='!lfd':
+			doubles_role = obtainRoleFromServer('LF Doubles',message.server)
+			await client.add_roles(message.author, doubles_role)
+			message.author.roles.append(doubles_role)
+			await client.send_message(message.channel, '{0} is looking for doubles games! {1}'.format(message.author.name, doubles_role.mention()))
+			return
+		if command[0]=='!lfg':
+			singles_role = obtainRoleFromServer('LF Singles',message.server)
+			doubles_role = obtainRoleFromServer('LF Doubles',message.server)
+			await client.add_roles(message.author, singles_role, doubles_role)
+			message.author.roles.append(singles_role)
+			message.author.roles.append(doubles_role)	
+			await client.send_message(message.channel, '{0} is looking for singles and doubles games! {1} {2}'.format(message.author.name, singles_role.mention(), doubles_role.mention()))
+			return
+		if command[0]=='!stop':
+			singles_role = obtainRoleFromServer('LF Singles',message.server)
+			doubles_role = obtainRoleFromServer('LF Doubles',message.server)
+			await client.remove_roles(user,singles_role,doubles_role)
+			message.author.roles = [oldrole for oldrole in message.author.roles if oldrole.id != singles_role.id or oldrole.id != doubles_role.id]
+			await client.send_message(message.channel, '{0}, you are no longer looking for any games'.format(message.author.mention()))
+			return
+		if command[0]=='help':
+			if command[1]=='lfs':
+				await client.send_message(message.channel, 'Usage "!lfs". Adds the LF Singles role to you and pings everyone with that role.')
+				return
+			if command[1]=='lfd':
+				await client.send_message(message.channel, 'Usage "!lfd". Adds the LF Doubles role to you and pings everyone with that role.')
+				return
+			if command[1]=='lfg':
+				await client.send_message(message.channel, 'Usage "!lfg". Adds both the LF Doubles and the LF Singles role to you and pings everyone with those role.')
+				return	
+			if command[1]=='stop':
+				await client.send_message(message.channel, 'Usage "!stop". Removes the LF Doubles and the LF Singles role from you, if you have either one.')
+				return
+			await client.send_message(message.channel, 'Commands are; "!lfs", "!lfd", "!lfg", "!stop", and "!help". Type "!help <command>" to see help for specific commands')
+			return
+		await client.send_message(message.channel, 'Commands are; "!lfs", "!lfd", "!lfg", "!stop", and "!help". Type "!help <command>" to see help for specific commands')
+
 @client.event
 async def on_ready():
     print('Logged in as')
