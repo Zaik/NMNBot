@@ -111,6 +111,10 @@ async def removeSecondaryRoles(server,user):
 		return
 	await client.remove_roles(user,secondary[0])
 
+#hack, store all public messages from the bot where it says someone is looing
+#for games
+playersearchdict = {}
+
 @client.event
 async def on_message(message):
 	if  (not isinstance(message.author,Member) and not message.channel.is_private):
@@ -295,20 +299,32 @@ async def on_message(message):
 			singles_role = obtainRoleFromServer('LF Singles',message.server)
 			await client.add_roles(message.author, singles_role)
 			message.author.roles.append(singles_role)
-			await client.send_message(message.channel, '{0} is looking for singles games! {1}'.format(message.author.name, singles_role.mention))
+			mess = await client.send_message(message.channel, '{0} is looking for singles games! {1}'.format(message.author.name, singles_role.mention))
+			if message.author in playersearchdict:
+				playersearchdict[message.author].update(mess)
+			else:
+				playersearchdict[message.author] = set([mess])
 			await client.delete_message(message)
 			return
 		if command[0]=='!lfd':
 			doubles_role = obtainRoleFromServer('LF Doubles',message.server)
 			await client.add_roles(message.author, doubles_role)
 			message.author.roles.append(doubles_role)
-			await client.send_message(message.channel, '{0} is looking for doubles games! {1}'.format(message.author.name, doubles_role.mention))
+			mess = await client.send_message(message.channel, '{0} is looking for doubles games! {1}'.format(message.author.name, doubles_role.mention))
+			if message.author in playersearchdict:
+				playersearchdict[message.author].update(mess)
+			else:
+				playersearchdict[message.author] = set([mess])
 			await client.delete_message(message)
 			return
 		if command[0]=='!lfg':
 			singles_role = obtainRoleFromServer('LF Singles',message.server)
 			doubles_role = obtainRoleFromServer('LF Doubles',message.server)
-			await client.add_roles(message.author, singles_role, doubles_role)
+			mess = await client.add_roles(message.author, singles_role, doubles_role)
+			if message.author in playersearchdict:
+				playersearchdict[message.author].update(mess)
+			else:
+				playersearchdict[message.author] = set([mess])
 			message.author.roles.append(singles_role)
 			message.author.roles.append(doubles_role)	
 			await client.send_message(message.channel, '{0} is looking for singles and doubles games! {1} {2}'.format(message.author.name, singles_role.mention, doubles_role.mention))
@@ -320,6 +336,10 @@ async def on_message(message):
 			await client.remove_roles(message.author,singles_role,doubles_role)
 			message.author.roles = [oldrole for oldrole in message.author.roles if oldrole.id != singles_role.id or oldrole.id != doubles_role.id]
 			await client.send_message(message.author, '{0}, you are no longer looking for any games'.format(message.author.mention))
+			if message.author in playersearchdict:
+				for mess in playersearchdict[message.author]:
+					await client.delete_message(mess)
+				del playersearchdict[message.author]
 			await client.delete_message(message)
 			return
 		if command[0]=='!help':
