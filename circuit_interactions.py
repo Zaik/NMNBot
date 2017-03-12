@@ -33,17 +33,23 @@ def obtain_score(player_name, players_cached = {}):
             ids.append(player_name)
     else:
         ids = [player_name]
-    scores = [leaderboard_map[pid] for pid in ids]
+    scores = [leaderboard_map[pid] for pid in ids if pid in leaderboard_map]
     players_cached[player_name] = scores
     return scores
 
 def calculate_leaderboard():
+    global data_cached
+    global leaderboard
+    global leaderboard_map
+    print("Calculating leaderboard...")
     data_cached = read_csv_file("most_recent_player_data.csv")
     (tag_id_map, id_score_map) = data_cached
     leaderboard = [(tag, pid, id_score_map[pid])
                    for tag in tag_id_map for pid in tag_id_map[tag]]
     leaderboard.sort(key = lambda k : k[2])
-    leaderboard = enumerate(leaderboard)
+    leaderboard = list(enumerate(leaderboard))
+    leaderboard_map = {}
     for rank, tag, pid, score in leaderboard:
         leaderboard_map[pid] = (tag, rank, score)
+    print("Done")
 
