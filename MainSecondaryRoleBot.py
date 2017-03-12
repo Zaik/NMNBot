@@ -9,6 +9,7 @@ import discord
 import discord.utils as utils
 from discord import Member
 from credentials import token
+import circuit_interactions
 client = discord.Client()
 
 #List of the proper names (case sensitive) of the roles that are managed
@@ -123,18 +124,69 @@ async def on_message(message):
 	if message.channel.is_private:
 		return
 	#Reply only to messages in the channel on the correct server not made by this bot
-	if not message.channel.name in watched_servers:
-		return
 	if message.server.name != requestserver:
 		return
-	# if message.author != client.user:
-		# return
-	#Don't concern ourselves with messages not starting with !
 	if not message.content.startswith('!'):
 		return
 	#Obtain the command as a list of strings, command[0] is the command, and the following items are the arguments
 	command=message.content.partition(" ")
 	command=[command[0],command[2]]
+
+	# if message.author != client.user:
+		# return
+	#Don't concern ourselves with messages not starting with !
+        
+        if command[0] == '!score':
+                if command[1] == "":
+                        await client.send_message(message.channel, '{0}, the "!score" command takes exactly one argument'.format(message.author.mention))
+                        return
+                else:
+                        matches = circuit_interactions.obtain_score(command[1])
+                        if len(matches == 0):
+                                await client.send_message(message.author,
+                                                          "Did not find any tracked player with that name/tag")
+                                return
+                        else:
+                                toomany_disclaimer = "{0}, ".format(message.author.mention)
+                                if len(matches > 1):
+                                        toomany_disclaimer += "Found several matches for that ID/TAG\n"
+                                to_format = [(tag, str(rank), str(score)) for tag, rank, score in matches]
+                                joined = "\n".join(["\t{0} has score {2} putting them at rank {1}".format(*tpl)
+                                                    for tpl in to_format])
+                                await client.send_message(message.author, toomany_disclaimer + joined)
+                                return
+        if command[0] == '!leaderboard':
+                leaderboard_snippet = circuit_interactions.leaderboard[0:10]
+                leaderboard_message = "{0}, Here's the current top 10 of the NMN tournament circuit!\n".format(message.author.mention)
+                players = "\n".join(["\t{1} : {0} with {2} points".format(*tpl) for tpl in leaderboard_snippet])
+                await client.send_message(message.channel, leadboard_message + players)
+                return
+        if not message.channel.name in watched_servers:
+                if command[0] == 'help':
+                        if command[1] == "":
+                                await client.send_message(message.author,
+                                                         "Hello! This is the Nordic Melee Netplay Bot! You have typed !help "
+                                                         "in a channel that is not the 'friendlies' or 'mainrequesting' channel!\n"
+                                                         "Outside of those channels, the only supported commands are: '!score' and '!leaderboard'\n"
+                                                         "For information on the command in those channels, type '!help' on those channels, for help for a specific "
+                                                         "command, type '!help <COMMAND'")
+                                return
+                        elif command[1] == "score" or command[1] == "!score" :
+                                await client_send_message(message.channel,
+                                                          "{0}, Usage: '!score <NAME|ID>'\n"
+                                                          "Prints the score of the player with the selected tag or ID in the NMN tournament circuit".format(message.author.mention))
+                                return
+                        elif command[2] == "leaderboard" or command[2] == "!leaderboard":
+                                await client_send_message(message.channel,
+                                                          "{0}, Usage: '!leaderboard'\n"
+                                                          "Sends you the list of the top ten players in the NMN tournament circuit".format(message.author.mention))
+                                return
+                        else:
+                                await client_send_message(message.channel,
+                                                          "{0}, You seem to have typed help for a command not supported in this channel. Try '!help' to see available"
+                                                          "commands".format(message.author.mention))
+                                return
+
 	if message.channel.name == main_requestchannel:
 		if command[0]=='!replacemain':
 			#If we have the wrong number of arguments, exit
@@ -288,6 +340,16 @@ async def on_message(message):
 			if (command[1]=="!removesecondary" or command[1]=="removesecondary"):
 				await client.send_message(message.channel, 'Usage "!removesecondary <character>". Removes the selected character from your secondaries. For a list of canonical role names type "!help roles"')
 				return
+                        elif command[1] == "score" or command[1] == "!score" :
+                                await client_send_message(message.channel,
+                                                          "{0}, Usage: '!score <NAME|ID>'\n"
+                                                          "Prints the score of the player with the selected tag or ID in the NMN tournament circuit".format(message.author.mention))
+                                return
+                        elif command[2] == "leaderboard" or command[2] == "!leaderboard":
+                                await client_send_message(message.channel,
+                                                          "{0}, Usage: '!leaderboard'\n"
+                                                          "Sends you the list of the top ten players in the NMN tournament circuit".format(message.author.mention))
+                                return
 			if (command[1]==""):
 				await client.send_message(message.channel, 'This is the Nordic Melee Netplay Community role-managing bot!\nCommands are; "!addmain", "!removemain", "!addsecondary", "!removesecondary", "!replacemain" and "!help". Type "!help <command>" to see help for specific commands.\nIf the bot does not reply to a command, it probably did it anyways, check your roles to make sure')
 				return
@@ -301,7 +363,7 @@ async def on_message(message):
 			message.author.roles.append(singles_role)
 			mess = await client.send_message(message.channel, '{0} is looking for singles games! {1}'.format(message.author.name, singles_role.mention))
 			if message.author in playersearchdict:
-				playersearchdict[message.author].update(mess)
+				playersearchdict[message.author].add(mess)
 			else:
 				playersearchdict[message.author] = set([mess])
 			await client.delete_message(message)
@@ -312,7 +374,7 @@ async def on_message(message):
 			message.author.roles.append(doubles_role)
 			mess = await client.send_message(message.channel, '{0} is looking for doubles games! {1}'.format(message.author.name, doubles_role.mention))
 			if message.author in playersearchdict:
-				playersearchdict[message.author].update(mess)
+				playersearchdict[message.author].add(mess)
 			else:
 				playersearchdict[message.author] = set([mess])
 			await client.delete_message(message)
@@ -322,7 +384,7 @@ async def on_message(message):
 			doubles_role = obtainRoleFromServer('LF Doubles',message.server)
 			mess = await client.add_roles(message.author, singles_role, doubles_role)
 			if message.author in playersearchdict:
-				playersearchdict[message.author].update(mess)
+				playersearchdict[message.author].add(mess)
 			else:
 				playersearchdict[message.author] = set([mess])
 			message.author.roles.append(singles_role)
@@ -359,6 +421,16 @@ async def on_message(message):
 			if command[1]=='stop':
 				await client.send_message(message.author, 'Usage "!stop". Removes the LF Doubles and the LF Singles role from you, if you have either one.')
 				return
+                        if command[1] == "score" or command[1] == "!score" :
+                                await client_send_message(message.channel,
+                                                          "{0}, Usage: '!score <NAME|ID>'\n"
+                                                          "Prints the score of the player with the selected tag or ID in the NMN tournament circuit".format(message.author.mention))
+                                return
+                        if command[2] == "leaderboard" or command[2] == "!leaderboard":
+                                await client_send_message(message.channel,
+                                                          "{0}, Usage: '!leaderboard'\n"
+                                                          "Sends you the list of the top ten players in the NMN tournament circuit".format(message.author.mention))
+                                return
 			await client.send_message(message.author, 'Commands are; "!lfs", "!lfd", "!lfg", "!stop", and "!help". Type "!help <command>" to see help for specific commands')
 			return
 		await client.send_message(message.author, 'Commands are; "!lfs", "!lfd", "!lfg", "!stop", and "!help". Type "!help <command>" to see help for specific commands')
@@ -370,4 +442,5 @@ async def on_ready():
     print(client.user.id)
     print('------')
 
+circuit_interactions.calculate_leaderboard()
 client.run(token)
