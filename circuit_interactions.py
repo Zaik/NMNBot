@@ -11,9 +11,11 @@ def read_csv_file(file):
         for row in reader:
             tag = row['tag'].lower()
             pid = row['id']
-            score = float(row['score'])
+            score = int(round(float(row['score'])))
             if (tag in tag_id_map):
-                 tag_id_map[tag].add(pid)
+                tag_id_map[tag].add(pid)
+            else:
+                tag_id_map[tag] = set([pid])
             id_score_map[pid] = score
     return (tag_id_map, id_score_map)
 
@@ -46,8 +48,9 @@ def calculate_leaderboard():
     (tag_id_map, id_score_map) = data_cached
     leaderboard = [(tag, pid, id_score_map[pid])
                    for tag in tag_id_map for pid in tag_id_map[tag]]
-    leaderboard.sort(key = lambda k : k[2])
+    leaderboard.sort(key = lambda k : k[2], reverse = True)
     leaderboard = list(enumerate(leaderboard))
+    leaderboard = [(a + 1, b, c, d) for (a, (b, c, d)) in leaderboard]
     leaderboard_map = {}
     for rank, tag, pid, score in leaderboard:
         leaderboard_map[pid] = (tag, rank, score)

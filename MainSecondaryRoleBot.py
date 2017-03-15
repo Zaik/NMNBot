@@ -149,17 +149,19 @@ async def on_message(message):
 				return
 			else:
 				toomany_disclaimer = "{0}, ".format(message.author.mention)
+				prepend = ""
 				if len(matches) > 1:
 					toomany_disclaimer += "Found several matches for that ID/TAG\n"
+					prepend = "\t" 
 				to_format = [(tag, str(rank), str(score)) for tag, rank, score in matches]
-				joined = "\n".join(["\t{0} has score {2} putting them at rank {1}".format(*tpl)
+				joined = "\n".join([prepend + "{0} has score {2} putting them at rank {1}".format(*tpl)
 						    for tpl in to_format])
-				await client.send_message(message.author, toomany_disclaimer + joined)
+				await client.send_message(message.channel, toomany_disclaimer + joined)
 				return
 	if command[0] == '!leaderboard':
 		leaderboard_snippet = circuit_interactions.leaderboard[0:10]
 		leaderboard_message = "{0}, Here's the current top 10 of the NMN tournament circuit!\n".format(message.author.mention)
-		players = "\n".join(["\t{1} : {0} with {2} points".format(*tpl) for tpl in leaderboard_snippet])
+		players = "\n".join(["\t{1} : {0} with {3} points".format(*tpl) for tpl in leaderboard_snippet])
 		await client.send_message(message.channel, leaderboard_message + players)
 		return
 	if not message.channel.name in watched_servers:
