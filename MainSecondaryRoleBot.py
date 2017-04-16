@@ -448,6 +448,7 @@ async def on_message(message):
                                         playersearchdict[message.author] = (message.author,
                                                                             set([mess]),
                                                                             set())
+                                await client.delete_message(message)
                                 return
                 if command[0]=='!lfd':
                         if command[1] == "":
@@ -485,7 +486,8 @@ async def on_message(message):
                                 if message.author in playersearchdict:
                                         playersearchdict[message.author][1].add(mess)
                                 else:
-                                        playersearchdict[message.author] = (message.author, [mess], set())
+                                        playersearchdict[message.author] = (message.author, set([mess]), set())
+                                await client.delete_message(message)
                                 return
                 if command[0]=='!lfg':
                         if command[1] == "":
@@ -525,9 +527,10 @@ async def on_message(message):
                                                                          ", ".join(args),
                                                                          " ".join([mem.mention for mem in members_to_tag])))
                                 if message.author in playersearchdict:
-                                        playersearchdict[message.author][1].append(mess)
+                                        playersearchdict[message.author][1].add(mess)
                                 else:
-                                        playersearchdict[message.author] = (message.author, [mess], [])
+                                        playersearchdict[message.author] = (message.author, set([mess]), set())
+                                await client.delete_message(message)
                                 return
                 if command[0]=='!stop':
                         singles_role = obtainRoleFromServer('LF Singles',message.server)
