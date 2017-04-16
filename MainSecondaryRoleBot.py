@@ -547,13 +547,13 @@ async def on_message(message):
                                 await client.send_message(message.author, 'This is the Nordic Melee Netplay Community role-managing bot!\n' + friendlies_help_mess)
                                 return
                         if command[1]=='lfs':
-                                await client.send_message(message.author, 'Usage "!lfs". Adds the LF Singles role to you and pings everyone with that role.')
+                                await client.send_message(message.author, 'Usage "!lfs [roles...]". If used without roles argument, adds the LF Singles role to you and pings everyone with that role. Otherwise it pings all players looking for singles who have at least one of the selected roles.')
                                 return
                         if command[1]=='lfd':
-                                await client.send_message(message.author, 'Usage "!lfd". Adds the LF Doubles role to you and pings everyone with that role.')
+                                await client.send_message(message.author, 'Usage "!lfd [roles...]". If used without roles argument, adds the LF Doubles role to you and pings everyone with that role. Otherwise it pings all players looking for doubles who have at least one of the selected roles.')
                                 return
                         if command[1]=='lfg':
-                                await client.send_message(message.author, 'Usage "!lfg". Adds both the LF Doubles and the LF Singles role to you and pings everyone with those role.')
+                                await client.send_message(message.author, 'Usage "!lfg [roles...]". If used without roles argument, adds both the LF Doubles and the LF Singles role to you and pings everyone with those role. Otherwise it pings all players looking for games who have at least one of the selected roles.')
                                 return        
                         if command[1]=='stop':
                                 await client.send_message(message.author, 'Usage "!stop". Removes the LF Doubles and the LF Singles role from you, if you have either one.')
