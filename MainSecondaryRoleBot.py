@@ -9,8 +9,10 @@ import discord
 import discord.utils as utils
 from discord import Member
 from credentials import token
+import datetime
 import circuit_interactions
 import sys
+import asyncio
 client = discord.Client()
 
 #List of the proper names (case sensitive) of the roles that are managed
@@ -25,6 +27,8 @@ requestserver="Nordic Melee Netplay"
 #Note that nicknames will be converted to camelcase before handling (E.g. : "that-fucking-sword.dude fuck" -> "That-Fucking-Sword.Dude Fuck" -> "Marth")
 #Note that the "Game And Watch" entry is NOT an example but rather necessary since the "Game and Watch" roles breaks the camelcase naming convention 
 propernamemap={"Game And Watch" : "Game and Watch"}
+
+timeout_duration = 3600
 
 #Returns exactly one role if the name specified can be translated into a proper role used on the server matching a role in the listofmains above
 def obtainRoleFromName(name,isMain,server):
@@ -154,14 +158,43 @@ def split_args_into_roles(args):
                                 return (args[0], None)
         return tokens
 
+# Async sleeps for duration seconds, then checks if state_tocheck[0] has the
+# same value as it had previously. If it does returns true else returns false
+async def timeout_checkstate(duration, member):
+        now = datetime.datetime.now()
+        timeoutdict[member.name] = now
+        await asyncio.sleep(duration)
+        if member.name in timeoutdict:
+                if timeoutdict[member.name] == now:
+                        del timeoutdict[member.name]
+                        return True
+        return False
+
+async def stop(client, author, server, timeout = False):
+        singles_role = obtainRoleFromServer('LF Singles',server)
+        doubles_role = obtainRoleFromServer('LF Doubles',server)
+        await client.remove_roles(author,singles_role,doubles_role)
+        author.roles = [oldrole for oldrole in author.roles if oldrole.id != singles_role.id or oldrole.id != doubles_role.id]
+        await client.send_message(author, 'you are no longer looking for any games{}'.format(" (search timed out)" if timeout else ""))
+        if author in playersearchdict:
+                for mess in playersearchdict[author][1]:
+                        await client.delete_message(mess)
+                        del playersearchdict[author]
+        if author.name in timeoutdict:
+                del timeoutdict[author.name]
+        return
+
+
 # Store info about the players we are tracking through roles
 # format is:
 # (actual_member,
 #  [message_list], # List of messages to delete 
 #  [search_list] # List of the modes they are searching for (singles, doubles)
 # )
-
 playersearchdict = {}
+# indexed by member name
+# content is timestamp from most recent reg
+timeoutdict = {}
 
 friendlies_help_mess = 'Commands are; "!lfs", "!lfd", "!lfg", "!stop", and "!help". Type "!help <command>" to see help for specific commands'
 mainreq_help_mess = 'Commands are; "!addmain", "!removemain", "!addsecondary", "!removesecondary", "!replacemain" and "!help". Type "!help <command>" to see help for specific commands.'
@@ -424,6 +457,8 @@ async def on_message(message):
                                                                             set([mess]),
                                                                             set(['singles']))
                                 await client.delete_message(message)
+                                if await timeout_checkstate(timeout_duration, message.author):
+                                        await stop(client, message.author, message.server, True)
                                 return
                         else:
                                 if not isinstance(args, list):
@@ -465,6 +500,8 @@ async def on_message(message):
                                                                             set([mess]),
                                                                             set(['doubles']))
                                 await client.delete_message(message)
+                                if await timeout_checkstate(timeout_duration, message.author):
+                                        await stop(client, message.author, message.server, True)
                                 return
                         else:
                                 if not isinstance(args, list):
@@ -508,6 +545,8 @@ async def on_message(message):
                                                                             set(['singles', 'doubles']))
                                 await client.send_message(message.channel, '{0} is looking for singles and doubles games! {1} {2}'.format(message.author.name, singles_role.mention, doubles_role.mention))
                                 await client.delete_message(message)
+                                if await timeout_checkstate(timeout_duration, message.author):
+                                        await stop(client, message.author, message.server, True)
                                 return
                         else:
                                 if not isinstance(args, list):
@@ -533,15 +572,7 @@ async def on_message(message):
                                 await client.delete_message(message)
                                 return
                 if command[0]=='!stop':
-                        singles_role = obtainRoleFromServer('LF Singles',message.server)
-                        doubles_role = obtainRoleFromServer('LF Doubles',message.server)
-                        await client.remove_roles(message.author,singles_role,doubles_role)
-                        message.author.roles = [oldrole for oldrole in message.author.roles if oldrole.id != singles_role.id or oldrole.id != doubles_role.id]
-                        await client.send_message(message.author, '{0}, you are no longer looking for any games'.format(message.author.mention))
-                        if message.author in playersearchdict:
-                                for mess in playersearchdict[message.author][1]:
-                                        await client.delete_message(mess)
-                                del playersearchdict[message.author]
+                        await stop(client, message.author, message.server)
                         await client.delete_message(message)
                         return
                 if command[0]=='!help':
